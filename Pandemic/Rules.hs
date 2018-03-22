@@ -7,9 +7,11 @@ import Control.Lens.TH
 import Control.Monad.State
 import Data.Function (on)
 import qualified Data.Map as M
-import Data.Set (Set, member, insert, empty)
+import Data.Set (Set, member, insert, empty, elems)
 import Data.Maybe
+import Data.Monoid
 import Data.Ord
+import Pandemic.Util
 
 data Role = Scientist
           | Researcher
@@ -21,7 +23,7 @@ data Role = Scientist
     deriving (Eq,Ord,Show)
 
 data Color = Red | Blue | Yellow | Black
-    deriving (Show,Eq,Ord,Enum)
+    deriving (Show,Eq,Ord,Enum,Bounded)
 
 type Infection = M.Map Color Int
 type Cures = Set Color
@@ -51,14 +53,18 @@ data Event = Airlift
            | PublicSubvention
     deriving (Eq,Ord,Show)
 
-data Card = CityCard City
-          | EventCard Event
+data PlayerCard = CityCard City
+                | EventCard Event
     deriving (Eq,Ord,Show)
+
+newtype InfectionCard = InfectionCard City
+
+data Deck a = Deck [a] [a]
 
 data Player = Player {
     _name :: String,
     _role :: Role,
-    _cards :: [Card],
+    _cards :: [PlayerCard],
     _location :: City
 }
 
@@ -66,12 +72,20 @@ makeLenses ''Player
 
 
 data Game = Game {
+    _cities :: Set City,
     _infection :: M.Map City Infection,
     _centers :: Set City,
     _cures :: Cures
 }
 
 makeLenses ''Game
+
+
+game :: City -> Game
+game city = let cities = closure city _neighbors
+                clean = M.fromList [(color, 0) | color <- [minBound..maxBound]]
+                infects = M.fromList [(city, clean) | city <- elems cities ]
+            in Game cities infects empty empty
 
 
 infect :: Color -> City -> State Game Outbreaks

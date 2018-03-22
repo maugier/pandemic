@@ -1,14 +1,10 @@
 module Pandemic.World where
 
 import Pandemic.Rules
-import Pandemic.Util (closure)
 import Data.Set (fromList)
 
 city :: String -> Color -> [City] -> City
 city name color neigh = City name color (fromList neigh)
-
-cities :: Neighbors
-cities = closure atlanta (_neighbors)
 
 sanFrancisco = city "San Francisco" Blue [tokyo, manila, chicago, losAngeles]
 chicago = city "Chicago" Blue [sanFrancisco, losAngeles, mexico, atlanta, montreal]
