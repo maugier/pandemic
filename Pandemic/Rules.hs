@@ -5,12 +5,14 @@ module Pandemic.Rules where
 import Control.Lens
 import Control.Lens.TH
 import Control.Monad.State
+import Control.Monad.Random
 import Data.Function (on)
 import qualified Data.Map as M
 import Data.Set (Set, member, insert, empty, elems)
 import Data.Maybe
 import Data.Monoid
 import Data.Ord
+import Pandemic.Deck
 import Pandemic.Util
 
 data Role = Scientist
@@ -55,11 +57,10 @@ data Event = Airlift
 
 data PlayerCard = CityCard City
                 | EventCard Event
+                | Epidemic
     deriving (Eq,Ord,Show)
 
 newtype InfectionCard = InfectionCard City
-
-data Deck a = Deck [a] [a]
 
 data Player = Player {
     _name :: String,
@@ -72,10 +73,15 @@ makeLenses ''Player
 
 
 data Game = Game {
+    _players :: [Player],
     _cities :: Set City,
     _infection :: M.Map City Infection,
     _centers :: Set City,
-    _cures :: Cures
+    _cures :: Cures,
+    _epidemics :: Int,
+    _outbreaks :: Int,
+    _infectionDeck :: Deck InfectionCard,
+    _playerDeck :: Deck PlayerCard
 }
 
 makeLenses ''Game
@@ -85,7 +91,24 @@ game :: City -> Game
 game city = let cities = closure city _neighbors
                 clean = M.fromList [(color, 0) | color <- [minBound..maxBound]]
                 infects = M.fromList [(city, clean) | city <- elems cities ]
-            in Game cities infects empty empty
+            in Game [] cities infects empty empty 0 0 emptyDeck emptyDeck
+
+
+intensity n | n < 3 = 2
+            | n < 5 = 3
+            | otherwise = 4
+
+
+addPlayer :: (Monad m, MonadRandom m, MonadState Game m) => String -> Role -> m ()
+addPlayer name role = do
+    return ()
+    
+
+epidemic :: (Monad m, MonadRandom m, MonadState Game m) => m ()
+epidemic = do
+    epidemics += 1
+        
+
 
 
 infect :: Color -> City -> State Game Outbreaks
