@@ -8,6 +8,7 @@ import Control.Lens.Zoom
 import Control.Monad.State
 import Control.Monad.Random
 import Data.Functor ((<$>))
+import Pandemic.Game
 import System.Random.Shuffle (shuffleM)
 
 data Deck a = Deck {
@@ -19,29 +20,30 @@ makeLenses ''Deck
 
 emptyDeck = Deck [] []
 
-pop :: State [a] (Maybe a)
-pop = state $ \case (x:xs) -> (Just x, xs)
-                    []     -> (Nothing, [])
+pop :: Play [a] a
+pop = do
+    pile <- get
+    case pile of
+        [] -> lose "Drawing from empty deck"
+        (x:xs) -> put xs >> return x
 
-push :: a -> State [a] ()
-push x = state $ \xs -> ((), x:xs)
+push :: a -> Play [a] ()
+push a = modify (a:) 
 
-draw :: State (Deck a) (Maybe a)
---draw = state $ \(Deck (x:xs) ys) -> (x, Deck xs ys)
-draw = zoom drawPile $ pop
+draw :: Play (Deck a) a
+draw = zoom drawPile pop
 
-drawLast :: State (Deck a) (Maybe a)
+drawLast :: Play (Deck a) a
 drawLast = zoom (drawPile . reversed) $ pop
 
-discard :: a -> State (Deck a) ()
---discard a = state $ \(Deck xs ys) -> ((), Deck xs (a:ys))
+discard :: a -> Play (Deck a) ()
 discard a = zoom discardPile $ push a
 
-shuffle :: (MonadState (Deck a) m, MonadRandom m) => m ()
-shuffle = do
-    Deck xs ys <- get
-    xs' <- shuffleM xs
-    put (Deck xs' ys)
+shuffle :: Play [a] ()
+shuffle = get >>= shuffleM >>= put
 
-remainingCards :: State (Deck a) Int
+resetDiscard :: Play (Deck a) ()
+resetDiscard = modify (\(Deck xs ys) -> Deck (ys++xs) [])
+
+remainingCards :: Play (Deck a) Int
 remainingCards = length <$> use drawPile

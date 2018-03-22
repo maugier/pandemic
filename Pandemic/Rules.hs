@@ -13,6 +13,7 @@ import Data.Maybe
 import Data.Monoid
 import Data.Ord
 import Pandemic.Deck
+import Pandemic.Game
 import Pandemic.Util
 
 data Role = Scientist
@@ -93,38 +94,52 @@ game city = let cities = closure city _neighbors
                 infects = M.fromList [(city, clean) | city <- elems cities ]
             in Game [] cities infects empty empty 0 0 emptyDeck emptyDeck
 
-
+intensity :: Int -> Int
 intensity n | n < 3 = 2
             | n < 5 = 3
             | otherwise = 4
 
 
-addPlayer :: (Monad m, MonadRandom m, MonadState Game m) => String -> Role -> m ()
+
+addPlayer :: String -> Role -> Play Game ()
 addPlayer name role = do
     return ()
     
 
-epidemic :: (Monad m, MonadRandom m, MonadState Game m) => m ()
+epidemicTarget :: Play Game City
+epidemicTarget = zoom infectionDeck $ do
+    card@(InfectionCard city) <- drawLast
+    discard card
+    zoom discardPile shuffle
+    resetDiscard
+    return city
+
+
+epidemic :: Play Game ()
 epidemic = do
     epidemics += 1
-        
+    city <- epidemicTarget
+    infect 3 city
+    return ()
 
 
-
-infect :: Color -> City -> State Game Outbreaks
-infect color city = execStateT (infect' city) empty where
-    infect' :: City -> StateT Outbreaks (State Game) ()
-    infect' city = do
+infect :: Int -> City -> Play Game ()
+infect n city = execStateT (infect' n city) empty >>= addOutbreaks where
+    addOutbreaks outs = outbreaks += length outs
+    color = city ^. nativeColor
+    infect' n city = do
         outbreak <- lift . zoom (infection . ix city . ix color) $ do
             i <- get
-            if i < 3
-                then modify (+1) >> return Nothing
-                else return $ Just ()
+            let i' = i+n
+            if (i' > 3)
+                then put 3 >> return (Just ())
+                else return Nothing
+
         when (isJust outbreak) $ do
             outs <- get
             (when . not) (city `member` outs) $ do
                 modify (insert city)
-                forM_ (city ^. neighbors) infect'
+                forM_ (city ^. neighbors) (infect' 1)
 
 
             
