@@ -8,7 +8,7 @@ import Control.Monad.State
 import Control.Monad.Random
 import Data.Function (on)
 import qualified Data.Map as M
-import Data.Set (Set, member, insert, empty, elems)
+import Data.Set (Set, member, insert, empty, singleton)
 import Data.Maybe
 import Data.Monoid
 import Data.Ord
@@ -28,18 +28,13 @@ data Role = Scientist
 data Color = Red | Blue | Yellow | Black
     deriving (Show,Eq,Ord,Enum,Bounded)
 
-type Infection = M.Map Color Int
-type Cures = Set Color
-
-
-type Outbreaks = Set City
-type Neighbors = Set City
 
 data City = City {
     _cityName :: String,
     _nativeColor :: Color,
-    _neighbors :: Neighbors
+    _neighbors :: Set City
 }
+makeLenses ''City
 
 instance Ord City where
     compare = comparing _cityName
@@ -50,7 +45,19 @@ instance Eq City where
 instance Show City where
     show = show . _cityName
 
-makeLenses ''City
+type Neighbors = Set City
+
+type Infection = M.Map City Int
+
+data Disease = Disease {
+    _cured :: Bool,
+    _reserve :: Int,
+    _infection :: Infection
+} deriving (Eq,Ord,Show)
+makeLenses ''Disease
+
+infectionAt :: City -> Simple Lens Disease Int
+infectionAt city = infection . at city . withDefault 0 
 
 data Event = Airlift
            | PublicSubvention
@@ -77,9 +84,8 @@ makeLenses ''Player
 data Game = Game {
     _players :: [Player],
     _cities :: Set City,
-    _infection :: M.Map City Infection,
+    _diseases :: M.Map Color Disease,
     _centers :: Set City,
-    _cures :: Cures,
     _epidemics :: Int,
     _outbreaks :: Int,
     _infectionDeck :: Deck InfectionCard,
@@ -91,9 +97,18 @@ makeLenses ''Game
 
 newGame :: City -> Game
 newGame city = let cities = closure city _neighbors
-                   clean = M.fromList [(color, 0) | color <- [minBound..maxBound]]
-                   infects = M.fromList [(city, clean) | city <- elems cities ]
-               in Game [] cities infects empty empty 0 0 emptyDeck emptyDeck
+                   emptyDisease = Disease False 20 (M.fromSet (const 0) cities)
+               in Game {
+                        _players = [],
+                        _cities = cities,
+                        _diseases = M.fromList [(color, emptyDisease) | color <- allOfThem ],
+                        _centers = singleton city,
+                        _epidemics = 0,
+                        _outbreaks = 0,
+                        _infectionDeck = emptyDeck,
+                        _playerDeck = emptyDeck
+               }
+
 
 intensity :: Int -> Int
 intensity n | n < 3 = 2
@@ -115,33 +130,57 @@ epidemicTarget = zoom infectionDeck $ do
     resetDiscard
     return city
 
-
 epidemic :: Play Game ()
 epidemic = do
     epidemics += 1
     city <- epidemicTarget
-    infect 3 city
-    return ()
+    infect 3 city 
 
 
+placeCubes :: Int -> City -> Play Disease Bool
+placeCubes amount city = do
+    (overflow, consumed) <- zoom (infectionAt city) $ do
+        i <- get
+        let new = i + amount
+        if new > 3
+            then put 3 >> return (True, 3 - i)
+            else put new >> return (False, amount)
+
+    zoom reserve $ do
+        r <- get
+        let remain = r - consumed
+        if remain < 0
+            then lose "Disease reserve was insufficient"
+            else put remain
+
+    return overflow
+
+
+cleanCity :: Bool -> City -> Play Disease ()
+cleanCity all city = do
+    spare <- zoom (infectionAt city) $ do
+        i <- get
+        case (i, all) of
+            (0, _) -> return 0
+            (_, True) -> put 0 >> return i
+            (_, False) -> put (i-1) >> return 1
+    reserve += spare
+    
+propagate :: Int -> City -> StateT (Set City) (Play Disease) ()
+propagate n city = do
+        overflow <- lift (placeCubes n city)
+        when overflow . once city $ 
+                forM_ (city ^. neighbors) 
+                    (propagate 1)  
+        
 infect :: Int -> City -> Play Game ()
-infect n city = execStateT (infect' n city) empty >>= addOutbreaks where
-    addOutbreaks outs = outbreaks += length outs
-    color = city ^. nativeColor
-    infect' n city = do
-        outbreak <- lift . zoom (infection . ix city . ix color) $ do
-            i <- get
-            let i' = i+n
-            if (i' > 3)
-                then put 3 >> return (Just ())
-                else return Nothing
-
-        when (isJust outbreak) $ do
-            outs <- get
-            (when . not) (city `member` outs) $ do
-                modify (insert city)
-                forM_ (city ^. neighbors) (infect' 1)
-
-
-            
-            
+infect n city = do
+    let color = city ^. nativeColor
+    chain <- length <$> zoom (diseases . ix color) (execStateT (propagate n city) empty)
+    return ()
+    zoom outbreaks $ do
+        o <- get
+        let o' = o + chain
+        if o' > 8
+            then lose "Exceeded number of maximum outbreaks. Global panic !"
+            else put o' 
