@@ -78,7 +78,7 @@ data PlayerCard = HandCard HandCard
                 | EpidemicCard
     deriving (Eq,Ord,Show)
 
-eventCards = map (HandCard . EventCard) allOfThem
+eventCards = map EventCard allOfThem
 
 newtype InfectionCard = InfectionCard City
     deriving (Eq,Ord,Show)
@@ -151,6 +151,8 @@ setupGame :: Int -> Play Game ()
 setupGame difficulty = do
     prepareInfectionDeck
     initialInfection
+    setupPlayerDeck difficulty
+
 
 cardsPerPlayer :: Game -> Int
 cardsPerPlayer game = do
@@ -179,7 +181,8 @@ dealPlayerHands = do
 
 setupPlayerDeck :: Int -> Play Game ()
 setupPlayerDeck difficulty = do
-    cards <- (map CityCard . elems) <$> use cities
+    cityCards <- (map CityCard . elems) <$> use cities
+    cards <- shuffleM (eventCards ++ cityCards)
     rest <- execStateT dealPlayerHands cards
     let packets = (HandCard <$>) <$> (sparse difficulty rest)
     shuffled <- mapM shuffleM packets
