@@ -39,11 +39,17 @@ drawLast = zoom (drawPile . reversed) $ pop
 discard :: a -> Play (Deck a) ()
 discard a = zoom discardPile $ push a
 
+drawAndDiscard :: Play (Deck a) a
+drawAndDiscard = do
+    card <- draw
+    discard card
+    return card
+
 shuffle :: Play [a] ()
 shuffle = get >>= shuffleM >>= put
 
-resetDiscard :: Play (Deck a) ()
-resetDiscard = modify (\(Deck xs ys) -> Deck (ys++xs) [])
+resetDiscard :: Deck a -> Deck a
+resetDiscard (Deck xs ys) = Deck (ys++xs) []
 
 remainingCards :: Play (Deck a) Int
 remainingCards = length <$> use drawPile

@@ -28,6 +28,3 @@ once key action = do
 
 allOfThem :: (Bounded t, Enum t) => [t]
 allOfThem = [minBound..maxBound]
-
-withDefault :: Eq a => a -> Simple Lens (Maybe a) a
-withDefault def = iso (fromMaybe def) (\x -> if x == def then Nothing else Just x)

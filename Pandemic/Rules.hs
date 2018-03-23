@@ -57,7 +57,12 @@ data Disease = Disease {
 makeLenses ''Disease
 
 infectionAt :: City -> Simple Lens Disease Int
-infectionAt city = infection . at city . withDefault 0 
+infectionAt city = infection . at city . non 0 
+
+eradicated :: Disease -> Bool
+eradicated = (M.empty ==) . _infection 
+
+emptyDisease = Disease True 24 M.empty
 
 data Event = Airlift
            | PublicSubvention
@@ -94,20 +99,28 @@ data Game = Game {
 
 makeLenses ''Game
 
+disease :: Color -> Simple Lens Game Disease
+disease color = diseases . at color . anon emptyDisease eradicated
 
 newGame :: City -> Game
 newGame city = let cities = closure city _neighbors
-                   emptyDisease = Disease False 20 (M.fromSet (const 0) cities)
+                   startingDisease = Disease False 24 (M.fromSet (const 0) cities)
                in Game {
                         _players = [],
                         _cities = cities,
-                        _diseases = M.fromList [(color, emptyDisease) | color <- allOfThem ],
+                        _diseases = M.fromList [(color, startingDisease) | color <- allOfThem ],
                         _centers = singleton city,
                         _epidemics = 0,
                         _outbreaks = 0,
                         _infectionDeck = emptyDeck,
                         _playerDeck = emptyDeck
                }
+
+
+initialInfection :: Play Game ()
+initialInfection = forM_ [3,2,1] $ \n -> replicateM_ 3 $ do
+    InfectionCard city <- zoom infectionDeck drawAndDiscard
+    infect n city
 
 
 intensity :: Int -> Int
@@ -127,7 +140,7 @@ epidemicTarget = zoom infectionDeck $ do
     card@(InfectionCard city) <- drawLast
     discard card
     zoom discardPile shuffle
-    resetDiscard
+    modify resetDiscard
     return city
 
 epidemic :: Play Game ()
@@ -155,9 +168,8 @@ placeCubes amount city = do
 
     return overflow
 
-
-cleanCity :: Bool -> City -> Play Disease ()
-cleanCity all city = do
+removeFromCity :: Bool -> City -> Play Disease ()
+removeFromCity all city = do
     spare <- zoom (infectionAt city) $ do
         i <- get
         case (i, all) of
@@ -166,6 +178,19 @@ cleanCity all city = do
             (_, False) -> put (i-1) >> return 1
     reserve += spare
     
+
+cleanCity :: Color -> Bool -> City -> Play Game ()
+cleanCity color all city = zoom diseases $ do
+    zoom (ix color) $ removeFromCity all city
+    at color %= checkEradication
+
+
+checkEradication :: Maybe Disease -> Maybe Disease
+checkEradication Nothing = Nothing
+checkEradication (Just d) | eradicated d = Nothing
+                          | otherwise = Just d
+
+
 propagate :: Int -> City -> StateT (Set City) (Play Disease) ()
 propagate n city = do
         overflow <- lift (placeCubes n city)
