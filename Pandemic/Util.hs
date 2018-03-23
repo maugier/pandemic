@@ -11,8 +11,8 @@ import Data.Maybe
 import Data.Set
 
 
-closure :: Ord k => k -> (k -> Set k) -> Set k
-closure init next = closure' empty (singleton init) where
+closure :: Ord k => (k -> Set k) -> k -> Set k
+closure next init = closure' empty (singleton init) where
     closure' r a | a == empty  = r
                  | otherwise   = let r' = (union r a)
                                  in closure' r' (unions (next <$> elems a) \\ r')
