@@ -60,7 +60,8 @@ infectionAt :: City -> Simple Lens Disease Int
 infectionAt city = infection . at city . non 0 
 
 eradicated :: Disease -> Bool
-eradicated = (M.empty ==) . _infection 
+eradicated (Disease True _ m) = M.null m
+eradicated _ = False
 
 emptyDisease = Disease True 24 M.empty
 
@@ -103,12 +104,11 @@ disease :: Color -> Simple Lens Game Disease
 disease color = diseases . at color . anon emptyDisease eradicated
 
 newGame :: City -> Game
-newGame city = let cities = closure city _neighbors
-                   startingDisease = Disease False 24 (M.fromSet (const 0) cities)
+newGame city = let cities = closure _neighbors city
                in Game {
                         _players = [],
                         _cities = cities,
-                        _diseases = M.fromList [(color, startingDisease) | color <- allOfThem ],
+                        _diseases = M.fromList [(color, cured .~ False $ emptyDisease) | color <- allOfThem ],
                         _centers = singleton city,
                         _epidemics = 0,
                         _outbreaks = 0,
@@ -116,12 +116,18 @@ newGame city = let cities = closure city _neighbors
                         _playerDeck = emptyDeck
                }
 
-
 initialInfection :: Play Game ()
 initialInfection = forM_ [3,2,1] $ \n -> replicateM_ 3 $ do
     InfectionCard city <- zoom infectionDeck drawAndDiscard
     infect n city
 
+
+setupInfectionDeck :: Play Game ()
+setupInfectionDeck = do
+    cities <- use (cities . _Wrapped)
+    zoom infectionDeck $ do
+        put . deck . map InfectionCard $ cities
+        zoom drawPile shuffle
 
 intensity :: Int -> Int
 intensity n | n < 3 = 2

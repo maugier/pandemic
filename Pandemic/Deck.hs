@@ -20,6 +20,9 @@ makeLenses ''Deck
 
 emptyDeck = Deck [] []
 
+deck :: [a] -> Deck a
+deck xs = Deck xs []
+
 pop :: Play [a] a
 pop = do
     pile <- get
