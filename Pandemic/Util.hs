@@ -7,6 +7,7 @@ import Control.Monad.Identity (runIdentity)
 import Control.Monad.State
 import Data.IORef
 import Data.Functor ((<$>))
+import Data.List (transpose)
 import Data.Maybe
 import Data.Set
 
@@ -28,3 +29,9 @@ once key action = do
 
 allOfThem :: (Bounded t, Enum t) => [t]
 allOfThem = [minBound..maxBound]
+
+group :: Int -> [a] -> [[a]]
+group n = Prelude.map (take n) . takeWhile (not . Prelude.null) . iterate (drop n)
+
+sparse :: Int -> [a] -> [[a]]
+sparse = (transpose .) . group

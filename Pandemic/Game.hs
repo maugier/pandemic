@@ -17,6 +17,9 @@ lose = throwError . LosingCondition
 block :: String -> Play s a
 block = throwError . OtherError
 
+announce :: String -> Play s ()
+announce = liftIO . putStrLn 
+
 play :: IORef s -> Play s x -> IO x
 play ref act = do
     s <- readIORef ref

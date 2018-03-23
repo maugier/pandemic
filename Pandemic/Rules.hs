@@ -8,13 +8,14 @@ import Control.Monad.State
 import Control.Monad.Random
 import Data.Function (on)
 import qualified Data.Map as M
-import Data.Set (Set, member, insert, empty, singleton)
+import Data.Set (Set, member, insert, empty, singleton, elems)
 import Data.Maybe
 import Data.Monoid
 import Data.Ord
 import Pandemic.Deck
 import Pandemic.Game
 import Pandemic.Util
+import System.Random.Shuffle (shuffleM)
 
 data Role = Scientist
           | Researcher
@@ -67,12 +68,17 @@ emptyDisease = Disease True 24 M.empty
 
 data Event = Airlift
            | PublicSubvention
+    deriving (Eq,Ord,Show,Enum,Bounded)
+
+data HandCard = CityCard City
+              | EventCard Event
     deriving (Eq,Ord,Show)
 
-data PlayerCard = CityCard City
-                | EventCard Event
-                | Epidemic
+data PlayerCard = HandCard HandCard
+                | EpidemicCard
     deriving (Eq,Ord,Show)
+
+eventCards = map (HandCard . EventCard) allOfThem
 
 newtype InfectionCard = InfectionCard City
     deriving (Eq,Ord,Show)
@@ -80,15 +86,22 @@ newtype InfectionCard = InfectionCard City
 data Player = Player {
     _name :: String,
     _role :: Role,
-    _cards :: [PlayerCard],
+    _cards :: [HandCard],
     _location :: City
 } deriving (Show)
+
+instance Ord Player where
+    compare = comparing _name
+
+instance Eq Player where
+    (==) = (==) `on` _name
 
 makeLenses ''Player
 
 
 data Game = Game {
-    _players :: [Player],
+    _home :: City,
+    _players :: M.Map String Player,
     _cities :: Set City,
     _diseases :: M.Map Color Disease,
     _centers :: Set City,
@@ -103,13 +116,17 @@ makeLenses ''Game
 disease :: Color -> Simple Lens Game Disease
 disease color = diseases . at color . anon emptyDisease eradicated
 
+give :: String -> HandCard -> Play Game ()
+give player card = players . ix player . cards %= (card :)
+
+
 newGame :: City -> Game
-newGame city = let cities = closure _neighbors city
-               in Game {
-                        _players = [],
-                        _cities = cities,
+newGame home = Game {
+                        _home = home,
+                        _players = M.empty,
+                        _cities = closure _neighbors home,
                         _diseases = M.fromList [(color, cured .~ False $ emptyDisease) | color <- allOfThem ],
-                        _centers = singleton city,
+                        _centers = singleton home,
                         _epidemics = 0,
                         _outbreaks = 0,
                         _infectionDeck = emptyDeck,
@@ -122,12 +139,52 @@ initialInfection = forM_ [3,2,1] $ \n -> replicateM_ 3 $ do
     infect n city
 
 
-setupInfectionDeck :: Play Game ()
-setupInfectionDeck = do
+prepareInfectionDeck :: Play Game ()
+prepareInfectionDeck = do
     cities <- use (cities . _Wrapped)
     zoom infectionDeck $ do
         put . deck . map InfectionCard $ cities
         zoom drawPile shuffle
+
+
+setupGame :: Int -> Play Game ()
+setupGame difficulty = do
+    prepareInfectionDeck
+    initialInfection
+
+cardsPerPlayer :: Game -> Int
+cardsPerPlayer game = do
+    case M.size $ game ^. players of
+        2 -> 4
+        3 -> 3
+        4 -> 2
+        
+drawCard :: String -> Play Game ()
+drawCard player = do
+    card <- zoom playerDeck draw
+    case card of
+        EpidemicCard -> epidemic
+        HandCard hand -> give player hand
+
+
+dealPlayerHands :: StateT [HandCard] (Play Game) ()
+dealPlayerHands = do
+    g <- lift get
+    let n = cardsPerPlayer g
+    replicateM_ n . forM_ (g ^. players . to M.keys) $ \p -> do
+        next <- get
+        case next of
+            [] -> lift $ block "Not enough cards to deal to player"
+            (c:cs) -> lift (give p c) >> put cs
+
+setupPlayerDeck :: Int -> Play Game ()
+setupPlayerDeck difficulty = do
+    cards <- (map CityCard . elems) <$> use cities
+    rest <- execStateT dealPlayerHands cards
+    let packets = (HandCard <$>) <$> (sparse difficulty rest)
+    shuffled <- mapM shuffleM packets
+    playerDeck .= deck (concat shuffled)
+
 
 intensity :: Int -> Int
 intensity n | n < 3 = 2
@@ -138,7 +195,8 @@ intensity n | n < 3 = 2
 
 addPlayer :: String -> Role -> Play Game ()
 addPlayer name role = do
-    return ()
+    h <- use home
+    players %= M.insert name (Player name role [] h)
     
 
 epidemicTarget :: Play Game City
