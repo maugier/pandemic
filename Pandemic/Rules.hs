@@ -62,13 +62,14 @@ data PlayerCard = CityCard City
     deriving (Eq,Ord,Show)
 
 newtype InfectionCard = InfectionCard City
+    deriving (Eq,Ord,Show)
 
 data Player = Player {
     _name :: String,
     _role :: Role,
     _cards :: [PlayerCard],
     _location :: City
-}
+} deriving (Show)
 
 makeLenses ''Player
 
@@ -83,16 +84,16 @@ data Game = Game {
     _outbreaks :: Int,
     _infectionDeck :: Deck InfectionCard,
     _playerDeck :: Deck PlayerCard
-}
+} deriving (Show)
 
 makeLenses ''Game
 
 
-game :: City -> Game
-game city = let cities = closure city _neighbors
-                clean = M.fromList [(color, 0) | color <- [minBound..maxBound]]
-                infects = M.fromList [(city, clean) | city <- elems cities ]
-            in Game [] cities infects empty empty 0 0 emptyDeck emptyDeck
+newGame :: City -> Game
+newGame city = let cities = closure city _neighbors
+                   clean = M.fromList [(color, 0) | color <- [minBound..maxBound]]
+                   infects = M.fromList [(city, clean) | city <- elems cities ]
+               in Game [] cities infects empty empty 0 0 emptyDeck emptyDeck
 
 intensity :: Int -> Int
 intensity n | n < 3 = 2
