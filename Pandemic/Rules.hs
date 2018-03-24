@@ -5,7 +5,7 @@ module Pandemic.Rules where
 import Control.Lens
 import Control.Lens.TH
 import Control.Monad.State
-import Control.Monad.Random
+import Control.Monad.Random hiding (next)
 import Data.Function (on)
 import qualified Data.Map as M
 import Data.Set (Set, member, insert, empty, singleton, elems, delete)
@@ -150,11 +150,19 @@ newGame home players = Game {
                         _playerDeck = emptyDeck
                }
 
+infectionTarget :: Play Game City
+infectionTarget = do
+    InfectionCard city <- zoom infectionDeck drawAndDiscard
+    return city
+
 initialInfection :: Play Game ()
 initialInfection = forM_ [3,2,1] $ \n -> replicateM_ 3 $ do
-    InfectionCard city <- zoom infectionDeck drawAndDiscard
-    infect n city
+    infectionTarget >>= infect n
 
+doInfection :: Play Game ()
+doInfection = do
+    i <- use intensity
+    replicateM_ i $ infectionTarget >>= infect 1
 
 prepareInfectionDeck :: Play Game ()
 prepareInfectionDeck = do
@@ -220,10 +228,11 @@ setupPlayerDeck difficulty = do
     playerDeck .= deck (concat shuffled)
 
 
-intensity :: Int -> Int
-intensity n | n < 3 = 2
-            | n < 5 = 3
-            | otherwise = 4
+intensity :: Getter Game Int
+intensity = epidemics . to intensity' where
+    intensity' n | n < 3 = 2
+                 | n < 5 = 3
+                 | otherwise = 4
 
 
 epidemicTarget :: Play Game City
@@ -276,6 +285,16 @@ cleanCity color all city = zoom (activeDisease color) $ removeFromCity all city
 buildCenter :: City -> Play Game ()
 buildCenter city = centers %= insert city
 
+
+endTurn :: Play Game ()
+endTurn = do
+    drawCard
+    drawCard
+    doInfection
+    players %= next
+
+
+    
 
 propagate :: Int -> City -> StateT (Set City) (Play Disease) ()
 propagate n city = do
