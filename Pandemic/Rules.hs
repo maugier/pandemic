@@ -4,6 +4,7 @@ module Pandemic.Rules where
 
 import Control.Lens
 import Control.Lens.TH
+import Control.Lens.At
 import Control.Monad.State
 import Control.Monad.Random hiding (next)
 import Data.Function (on)
@@ -14,6 +15,7 @@ import Data.Monoid
 import Data.Ord
 import Pandemic.Deck
 import Pandemic.Game
+import Pandemic.MapLens
 import Pandemic.Util
 import System.Random.Shuffle (shuffleM)
 
@@ -121,6 +123,15 @@ data Game = Game {
 
 makeLenses ''Game
 
+data Difficulty = Tutorial
+                | Normal
+                | Epic
+
+totalEpidemics :: Difficulty -> Int
+totalEpidemics Tutorial = 4
+totalEpidemics Normal = 5
+totalEpidemics Epic = 6
+
 disease :: Color -> Simple Lens Game Disease
 disease color = diseases . at color . anon emptyDisease isEradicated
 
@@ -136,10 +147,10 @@ currentPlayer = players . current
 give :: HandCard -> Play Game ()
 give card = currentPlayer . cards %= insert card
 
-newGame :: City -> [Player] -> Game
+newGame :: City -> [(String,Role)] -> Game
 newGame home players = Game {
                         _home = home,
-                        _players = cycleCZ players,
+                        _players = cycleCZ [Player name role empty home | (name,role) <- players],
                         _actions = 4,
                         _cities = closure _neighbors home,
                         _diseases = M.fromList [(color, cured .~ False $ emptyDisease) | color <- allOfThem ],
@@ -166,13 +177,13 @@ doInfection = do
 
 prepareInfectionDeck :: Play Game ()
 prepareInfectionDeck = do
-    cities <- use (cities . _Wrapped)
+    cities <- use (cities . to elems)
     zoom infectionDeck $ do
         put . deck . map InfectionCard $ cities
         zoom drawPile shuffle
 
 
-setupGame :: Int -> Play Game ()
+setupGame :: Difficulty -> Play Game ()
 setupGame difficulty = do
     prepareInfectionDeck
     initialInfection
@@ -180,7 +191,7 @@ setupGame difficulty = do
 
 
 cardsPerPlayer :: Game -> Int
-cardsPerPlayer game = do
+cardsPerPlayer game =
     case game ^. players . to length of
         2 -> 4
         3 -> 3
@@ -211,19 +222,24 @@ useCard card = zoom (currentPlayer . cards) $ do
 
 dealPlayerHands :: StateT [HandCard] (Play Game) ()
 dealPlayerHands = do
-    return ()
-    where
-        --dealOneCard :: Player -> StateT [HandCard] (Play Game) Player
-        dealOneCard player = StateT $ \case
-            [] -> block "Not enough city cards for all players"
-            (card:rest) -> return (cards %~ insert card $ player, rest)
+    count <- lift . use $ to cardsPerPlayer
+    hoist' (zoom (players . traverse)) $ replicateM_ count dealOneCard
 
-setupPlayerDeck :: Int -> Play Game ()
-setupPlayerDeck difficulty = do
+        
+dealOneCard :: StateT [HandCard] (Play Player) ()
+dealOneCard = do
+    pile <- get
+    case pile of
+        []          -> lift . block $ "Not enough city cards for all players"
+        (card:rest) -> put rest >> lift (cards %= insert card)
+
+setupPlayerDeck :: Difficulty -> Play Game ()
+setupPlayerDeck difficulty  = do
     cityCards <- (map CityCard . elems) <$> use cities
     cards <- shuffleM (eventCards ++ cityCards)
     rest <- execStateT dealPlayerHands cards
-    let packets = (HandCard <$>) <$> (sparse difficulty rest)
+    let n = totalEpidemics difficulty
+    let packets = ((EpidemicCard:) . (HandCard <$>)) <$> (sparse n rest)
     shuffled <- mapM shuffleM packets
     playerDeck .= deck (concat shuffled)
 
@@ -292,6 +308,7 @@ endTurn = do
     drawCard
     doInfection
     players %= next
+    actions .= 4
 
 
     

@@ -33,7 +33,7 @@ allOfThem :: (Bounded t, Enum t) => [t]
 allOfThem = [minBound..maxBound]
 
 group :: Int -> [a] -> [[a]]
-group n = Prelude.map (take n) . takeWhile (not . Prelude.null) . iterate (drop n)
+group n = Prelude.map (Prelude.take n) . takeWhile (not . Prelude.null) . iterate (Prelude.drop n)
 
 sparse :: Int -> [a] -> [[a]]
 sparse = (transpose .) . group
@@ -69,3 +69,9 @@ instance Traversable CycleZip where
 removing :: (b -> Bool) -> Traversal (Maybe a) (Maybe b) a b
 removing pred f Nothing = pure Nothing
 removing pred f (Just x) = (\x' -> if pred x' then Nothing else Just x') <$> f x
+
+swapState :: Functor f => StateT s1 (StateT s2 f) a -> StateT s2 (StateT s1 f) a
+swapState m = StateT (\s2 -> StateT (\s1 -> fmap swap (runStateT (runStateT m s1) s2))) where
+    swap ((r,s1),s2) = ((r,s2),s1)
+
+hoist' f = swapState . f . swapState

@@ -27,4 +27,3 @@ play ref act = do
     case r of
         Right (a,s') -> writeIORef ref s' >> return a
         Left err -> error (show err)
-        

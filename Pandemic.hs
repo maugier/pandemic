@@ -7,7 +7,7 @@ import Pandemic.Game
 import Pandemic.Rules
 import Pandemic.World
 
-new = newIORef . newGame $ atlanta
+new = newIORef (newGame atlanta [("Max", Medic), ("Noosh", Operations)])
 
 disp :: Show a => IORef a -> IO ()
 disp = (>>= print) . readIORef
