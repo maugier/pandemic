@@ -1,4 +1,4 @@
-{-# LANGUAGE TemplateHaskell, RankNTypes, FlexibleContexts #-}
+{-# LANGUAGE TemplateHaskell, RankNTypes, FlexibleContexts, LambdaCase #-}
 
 module Pandemic.Rules where
 
@@ -8,7 +8,7 @@ import Control.Monad.State
 import Control.Monad.Random
 import Data.Function (on)
 import qualified Data.Map as M
-import Data.Set (Set, member, insert, empty, singleton, elems)
+import Data.Set (Set, member, insert, empty, singleton, elems, delete)
 import Data.Maybe
 import Data.Monoid
 import Data.Ord
@@ -67,7 +67,10 @@ eradicated _ = False
 emptyDisease = Disease True 24 M.empty
 
 data Event = Airlift
-           | PublicSubvention
+           | PublicFunding
+           | Prevision
+           | QuietNight
+           | Resilience
     deriving (Eq,Ord,Show,Enum,Bounded)
 
 data HandCard = CityCard City
@@ -86,7 +89,7 @@ newtype InfectionCard = InfectionCard City
 data Player = Player {
     _name :: String,
     _role :: Role,
-    _cards :: [HandCard],
+    _cards :: Set HandCard,
     _location :: City
 } deriving (Show)
 
@@ -98,10 +101,12 @@ instance Eq Player where
 
 makeLenses ''Player
 
+type Players = CycleZip Player
+
 
 data Game = Game {
     _home :: City,
-    _players :: M.Map String Player,
+    _players :: Players,
     _cities :: Set City,
     _diseases :: M.Map Color Disease,
     _centers :: Set City,
@@ -113,17 +118,19 @@ data Game = Game {
 
 makeLenses ''Game
 
-disease :: Color -> Simple Lens Game Disease
-disease color = diseases . at color . anon emptyDisease eradicated
+disease :: Color -> Simple Traversal Game Disease
+disease color = diseases . at color . removing eradicated
 
-give :: String -> HandCard -> Play Game ()
-give player card = players . ix player . cards %= (card :)
+currentPlayer :: Simple Lens Game Player
+currentPlayer = players . current
 
+give :: HandCard -> Play Game ()
+give card = currentPlayer . cards %= insert card
 
-newGame :: City -> Game
-newGame home = Game {
+newGame :: City -> [Player] -> Game
+newGame home players = Game {
                         _home = home,
-                        _players = M.empty,
+                        _players = cycleCZ players,
                         _cities = closure _neighbors home,
                         _diseases = M.fromList [(color, cured .~ False $ emptyDisease) | color <- allOfThem ],
                         _centers = singleton home,
@@ -156,28 +163,35 @@ setupGame difficulty = do
 
 cardsPerPlayer :: Game -> Int
 cardsPerPlayer game = do
-    case M.size $ game ^. players of
+    case game ^. players . to length of
         2 -> 4
         3 -> 3
         4 -> 2
+        _ -> error "Unsopported player number"
         
-drawCard :: String -> Play Game ()
-drawCard player = do
+drawCard :: Play Game ()
+drawCard = do
     card <- zoom playerDeck draw
     case card of
         EpidemicCard -> epidemic
-        HandCard hand -> give player hand
+        HandCard hand -> give hand
+
+useCard :: String -> HandCard -> Play Game ()
+useCard name card = zoom (currentPlayer . cards) $ do
+        hand <- get
+        if card `elem` hand
+            then modify $ delete card
+            else block "You do not have that card"
 
 
 dealPlayerHands :: StateT [HandCard] (Play Game) ()
 dealPlayerHands = do
-    g <- lift get
-    let n = cardsPerPlayer g
-    replicateM_ n . forM_ (g ^. players . to M.keys) $ \p -> do
-        next <- get
-        case next of
-            [] -> lift $ block "Not enough cards to deal to player"
-            (c:cs) -> lift (give p c) >> put cs
+    return ()
+    where
+        --dealOneCard :: Player -> StateT [HandCard] (Play Game) Player
+        dealOneCard player = StateT $ \case
+            [] -> block "Not enough city cards for all players"
+            (card:rest) -> return (cards %~ insert card $ player, rest)
 
 setupPlayerDeck :: Int -> Play Game ()
 setupPlayerDeck difficulty = do
@@ -194,13 +208,6 @@ intensity n | n < 3 = 2
             | n < 5 = 3
             | otherwise = 4
 
-
-
-addPlayer :: String -> Role -> Play Game ()
-addPlayer name role = do
-    h <- use home
-    players %= M.insert name (Player name role [] h)
-    
 
 epidemicTarget :: Play Game City
 epidemicTarget = zoom infectionDeck $ do
@@ -276,3 +283,17 @@ infect n city = do
         if o' > 8
             then lose "Exceeded number of maximum outbreaks. Global panic !"
             else put o' 
+
+inRangeOf :: City -> City -> Play Game Bool
+inRangeOf a b = if b `member` _neighbors a
+        then return True
+        else do
+            cs <- use centers
+            return $ (a `member` cs) && (b `member` cs)
+
+autocure :: City -> Play Game ()
+autocure city = forM_ allOfThem $ \color -> zoom (disease color) $ do
+    c <- use cured
+    when c $ removeFromCity True city
+        
+    

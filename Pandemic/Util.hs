@@ -2,13 +2,15 @@
 
 module Pandemic.Util where
 
+import Control.Applicative ((<$>), (<*>))
 import Control.Lens
 import Control.Monad.Identity (runIdentity)
 import Control.Monad.State
 import Data.IORef
-import Data.Functor ((<$>))
 import Data.List (transpose)
 import Data.Maybe
+import qualified Data.Map as M
+import Data.Monoid
 import Data.Set
 
 
@@ -35,3 +37,35 @@ group n = Prelude.map (take n) . takeWhile (not . Prelude.null) . iterate (drop 
 
 sparse :: Int -> [a] -> [[a]]
 sparse = (transpose .) . group
+
+data CycleZip a = CycleZip [a] a [a] 
+    deriving Show
+
+singleCZ :: a -> CycleZip a
+singleCZ a = CycleZip [] a []
+
+cycleCZ :: [a] -> CycleZip a
+cycleCZ [] = error "Cannot create empty CZ"
+cycleCZ (x:xs) = CycleZip [] x xs
+
+next :: CycleZip a -> CycleZip a 
+next as@(CycleZip [] a []) = as
+next (CycleZip ps a (n:ns)) = CycleZip (a:ps) n ns
+next as@(CycleZip ps a []) = next (CycleZip [] a (reverse ps))
+
+current :: Simple Lens (CycleZip a) a
+current f (CycleZip ps a ns) = (\a' -> CycleZip ps a' ns) <$> f a
+
+instance Functor CycleZip where
+    fmap f (CycleZip ps a ns) = CycleZip (fmap f ps) (f a) (fmap f ps)
+
+instance Foldable CycleZip where
+    foldMap f (CycleZip ps a ns) = f a <> foldMap f ns <> getDual (foldMap (Dual . f) ps)
+
+instance Traversable CycleZip where
+    traverse f (CycleZip ps a ns) = (\a' ns' ps' -> CycleZip (reverse ps') a' ns') <$> f a <*> traverse f ns <*> traverse f (reverse ps)
+
+
+removing :: (b -> Bool) -> Traversal (Maybe a) (Maybe b) a b
+removing pred f Nothing = pure Nothing
+removing pred f (Just x) = (\x' -> if pred x' then Nothing else Just x') <$> f x
