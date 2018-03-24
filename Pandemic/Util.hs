@@ -75,3 +75,4 @@ swapState m = StateT (\s2 -> StateT (\s1 -> fmap swap (runStateT (runStateT m s1
     swap ((r,s1),s2) = ((r,s2),s1)
 
 hoist' f = swapState . f . swapState
+

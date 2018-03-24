@@ -15,7 +15,6 @@ import Data.Monoid
 import Data.Ord
 import Pandemic.Deck
 import Pandemic.Game
-import Pandemic.MapLens
 import Pandemic.Util
 import System.Random.Shuffle (shuffleM)
 
@@ -132,6 +131,18 @@ totalEpidemics Tutorial = 4
 totalEpidemics Normal = 5
 totalEpidemics Epic = 6
 
+zoomOr :: Play s () -> Simple Traversal s a -> Play a () -> Play s ()
+zoomOr err t s = do
+    out <- zoom t (fmap (First . Just) s)
+    case getFirst out of
+        Nothing -> err
+        Just () -> return ()
+
+player :: String -> Simple Traversal Game Player
+player name = players . traverse . filtered ((name == ) . _name)
+
+withPlayer name = zoomOr (block "This player does not exist") (player name)
+
 disease :: Color -> Simple Lens Game Disease
 disease color = diseases . at color . anon emptyDisease isEradicated
 
@@ -144,8 +155,16 @@ eradicated color = diseases . at color . to isNothing
 currentPlayer :: Simple Lens Game Player
 currentPlayer = players . current
 
-give :: HandCard -> Play Game ()
-give card = currentPlayer . cards %= insert card
+giveCard :: HandCard -> Play Player ()
+giveCard card = cards %= insert card
+
+takeCard :: HandCard -> Play Player ()
+takeCard card = do
+    ok <- use (cards . contains card)
+    if ok
+        then cards %= delete card
+        else block "The player does not have this card"
+    
 
 newGame :: City -> [(String,Role)] -> Game
 newGame home players = Game {
@@ -203,7 +222,8 @@ drawCard = do
     card <- zoom playerDeck draw
     case card of
         EpidemicCard -> epidemic
-        HandCard hand -> give hand
+        HandCard hand -> zoom currentPlayer $ giveCard hand
+        
 
 useAction :: Play Game ()
 useAction = zoom actions $ do
@@ -231,7 +251,7 @@ dealOneCard = do
     pile <- get
     case pile of
         []          -> lift . block $ "Not enough city cards for all players"
-        (card:rest) -> put rest >> lift (cards %= insert card)
+        (card:rest) -> put rest >> lift (giveCard card)
 
 setupPlayerDeck :: Difficulty -> Play Game ()
 setupPlayerDeck difficulty  = do
@@ -310,8 +330,6 @@ endTurn = do
     players %= next
     actions .= 4
 
-
-    
 
 propagate :: Int -> City -> StateT (Set City) (Play Disease) ()
 propagate n city = do

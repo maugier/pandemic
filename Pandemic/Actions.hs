@@ -46,5 +46,39 @@ treatDisease color = do
     useAction
     loc <- use (currentPlayer . location)
     isMedic <- use (currentPlayer . role . to (== Medic))
-    erad <- use (disease color . cured)
-    cleanCity color (isMedic || erad) loc
+    isCured <- use (disease color . cured)
+    cleanCity color (isMedic || isCured) loc
+
+cureDisease :: Color -> [City] -> Play Game ()
+cureDisease color hand = do
+    useAction
+    (when.has (folded . nativeColor . filtered (/= color))) hand $ block "Cards are not of the correct color"
+    r <- use (currentPlayer . role)
+    let l = length hand
+    (when.not) (l == 5 || (r == Scientist && l == 4)) $ block "Not the correct number of cards for a cure"
+    forM_ hand (useCard . CityCard)
+    disease color . cured .= True
+
+takeCardFrom :: String -> City -> Play Game ()
+takeCardFrom name city = do
+    useAction
+    loc <- use (currentPlayer . location)
+    withPlayer name $ do
+        otherloc <- use location
+        when (loc /= otherloc) $ block "You must be in the same city to exchange cards"
+        r <- use role
+        when (r /= Researcher && otherloc /= city) $ block "Only the researcher can offer cards from remote cities"
+        takeCard (CityCard city)
+    zoom currentPlayer $ giveCard (CityCard city)
+
+giveCardTo :: String -> City -> Play Game ()
+giveCardTo name city = do
+    useAction
+    zoom currentPlayer $ takeCard (CityCard city)
+    loc <- use (currentPlayer . location)
+    r <- use (currentPlayer . role)
+    withPlayer name $ do
+        otherloc <- use location
+        when (loc /= otherloc) $ block "You must be in the same city to exchange cards"
+        when (r /= Researcher && otherloc /= city) $ block "Only the researcher can offer cards from remote cities"
+        giveCard (CityCard city)

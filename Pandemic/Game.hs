@@ -6,15 +6,15 @@ import Control.Monad.Except
 import Control.Monad.State
 
 data GameError = LosingCondition String
+               | WinningCondition String
                | OtherError String
     deriving (Show)
 
 type Play s = StateT s (ExceptT GameError IO)
 
-lose :: String -> Play s a
+win, lose, block :: String -> Play s a
+win = throwError . WinningCondition
 lose = throwError . LosingCondition
-
-block :: String -> Play s a
 block = throwError . OtherError
 
 announce :: String -> Play s ()
@@ -27,3 +27,5 @@ play ref act = do
     case r of
         Right (a,s') -> writeIORef ref s' >> return a
         Left err -> error (show err)
+
+
