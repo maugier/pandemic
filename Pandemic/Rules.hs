@@ -60,9 +60,9 @@ makeLenses ''Disease
 infectionAt :: City -> Simple Lens Disease Int
 infectionAt city = infection . at city . non 0 
 
-eradicated :: Disease -> Bool
-eradicated (Disease True _ m) = M.null m
-eradicated _ = False
+isEradicated :: Disease -> Bool
+isEradicated (Disease True _ m) = M.null m
+isEradicated _ = False
 
 emptyDisease = Disease True 24 M.empty
 
@@ -76,6 +76,8 @@ data Event = Airlift
 data HandCard = CityCard City
               | EventCard Event
     deriving (Eq,Ord,Show)
+
+makePrisms ''HandCard
 
 data PlayerCard = HandCard HandCard
                 | EpidemicCard
@@ -107,6 +109,7 @@ type Players = CycleZip Player
 data Game = Game {
     _home :: City,
     _players :: Players,
+    _actions :: Int,
     _cities :: Set City,
     _diseases :: M.Map Color Disease,
     _centers :: Set City,
@@ -118,8 +121,14 @@ data Game = Game {
 
 makeLenses ''Game
 
-disease :: Color -> Simple Traversal Game Disease
-disease color = diseases . at color . removing eradicated
+disease :: Color -> Simple Lens Game Disease
+disease color = diseases . at color . anon emptyDisease isEradicated
+
+activeDisease :: Color -> Simple Traversal Game Disease
+activeDisease color = diseases . at color . removing isEradicated
+
+eradicated :: Color -> Getter Game Bool
+eradicated color = diseases . at color . to isNothing
 
 currentPlayer :: Simple Lens Game Player
 currentPlayer = players . current
@@ -131,6 +140,7 @@ newGame :: City -> [Player] -> Game
 newGame home players = Game {
                         _home = home,
                         _players = cycleCZ players,
+                        _actions = 4,
                         _cities = closure _neighbors home,
                         _diseases = M.fromList [(color, cured .~ False $ emptyDisease) | color <- allOfThem ],
                         _centers = singleton home,
@@ -176,8 +186,15 @@ drawCard = do
         EpidemicCard -> epidemic
         HandCard hand -> give hand
 
-useCard :: String -> HandCard -> Play Game ()
-useCard name card = zoom (currentPlayer . cards) $ do
+useAction :: Play Game ()
+useAction = zoom actions $ do
+    a <- get
+    if a > 0
+        then put (a-1)
+        else block "You are out of actions for this turn"
+
+useCard :: HandCard -> Play Game ()
+useCard card = zoom (currentPlayer . cards) $ do
         hand <- get
         if card `elem` hand
             then modify $ delete card
@@ -247,22 +264,17 @@ removeFromCity all city = do
     spare <- zoom (infectionAt city) $ do
         i <- get
         case (i, all) of
-            (0, _) -> return 0
+            (0, _) -> block "This city is not infected"
             (_, True) -> put 0 >> return i
             (_, False) -> put (i-1) >> return 1
     reserve += spare
     
 
 cleanCity :: Color -> Bool -> City -> Play Game ()
-cleanCity color all city = zoom diseases $ do
-    zoom (ix color) $ removeFromCity all city
-    at color %= checkEradication
+cleanCity color all city = zoom (activeDisease color) $ removeFromCity all city
 
-
-checkEradication :: Maybe Disease -> Maybe Disease
-checkEradication Nothing = Nothing
-checkEradication (Just d) | eradicated d = Nothing
-                          | otherwise = Just d
+buildCenter :: City -> Play Game ()
+buildCenter city = centers %= insert city
 
 
 propagate :: Int -> City -> StateT (Set City) (Play Disease) ()
@@ -276,7 +288,6 @@ infect :: Int -> City -> Play Game ()
 infect n city = do
     let color = city ^. nativeColor
     chain <- length <$> zoom (diseases . ix color) (execStateT (propagate n city) empty)
-    return ()
     zoom outbreaks $ do
         o <- get
         let o' = o + chain
