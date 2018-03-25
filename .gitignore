@@ -2,3 +2,5 @@
 *.dyn_o
 *.hi
 *.dyn_hi
+dist
+Setup.hs
