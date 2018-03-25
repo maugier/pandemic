@@ -13,6 +13,7 @@ import Data.Set (Set, member, insert, empty, singleton, elems, delete)
 import Data.Maybe
 import Data.Monoid
 import Data.Ord
+import Data.Text (Text)
 import Pandemic.Deck
 import Pandemic.Game
 import Pandemic.Util
@@ -27,12 +28,12 @@ data Role = Scientist
           | Medic
     deriving (Eq,Ord,Show)
 
-data Color = Red | Blue | Yellow | Black
+data Color = Blue | Yellow | Black | Red
     deriving (Show,Eq,Ord,Enum,Bounded)
 
 
 data City = City {
-    _cityName :: String,
+    _cityName :: Text,
     _nativeColor :: Color,
     _neighbors :: Set City
 }

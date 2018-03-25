@@ -5,10 +5,11 @@ import Data.IORef
 import Pandemic.Actions
 import Pandemic.Game
 import Pandemic.Rules
+import Pandemic.Pretty
 import Pandemic.World
 
 new = newIORef (newGame atlanta [("Max", Medic), ("Noosh", Operations)])
 
-disp :: Show a => IORef a -> IO ()
-disp = (>>= print) . readIORef
+disp :: Pretty a => IORef a -> IO ()
+disp = (>>= pPrint) . readIORef
 

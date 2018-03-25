@@ -2,9 +2,10 @@ module Pandemic.World where
 
 import Pandemic.Rules
 import Data.Set (fromList)
+import Data.Text (pack)
 
 city :: String -> Color -> [City] -> City
-city name color neigh = City name color (fromList neigh)
+city name color neigh = City (pack name) color (fromList neigh)
 
 sanFrancisco = city "San Francisco" Blue [tokyo, manila, chicago, losAngeles]
 chicago = city "Chicago" Blue [sanFrancisco, losAngeles, mexico, atlanta, montreal]
