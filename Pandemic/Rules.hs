@@ -35,6 +35,7 @@ data Color = Blue | Yellow | Black | Red
 data City = City {
     _cityName :: Text,
     _nativeColor :: Color,
+    _coordinates :: (Int, Int),
     _neighbors :: Set City
 }
 makeLenses ''City
