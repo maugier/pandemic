@@ -1,4 +1,4 @@
-{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FlexibleInstances, OverloadedStrings #-}
 
 module Pandemic.Map where
 
@@ -59,6 +59,18 @@ instance Sliceable a => Sliceable (Chunk a) where
 
 instance Paddable a => Paddable (Chunk a) where
     sPad = chunk . sPad 
+
+
+drawLine :: [(Int,Int)] -> Render Text
+drawLine [] = A.empty
+drawLine [(y,x)] = move y x >> return "+"
+drawLine ((y,x):(r@((y',x'):_))) = (move y x >> (return "+" <|> drawSegment (y'-y) (x'-x))) <|> drawLine r
+
+drawSegment 0 0 = A.empty
+drawSegment 0 x | x > 0  = move 0 1 >> return (T.replicate (x-1) "-")
+                | x < 0  = move 0 x >> drawSegment 0 (-x)
+drawSegment y 0 | y > 0  = choice [1..(y-1)] >>= flip move 0 >> return "|"
+                | y < 0  = move y 0 >> drawSegment (-y) 0
 
 
 colorRender8 :: (Renderable t, Paddable t) => Render (Chunk t) -> [ByteString]
