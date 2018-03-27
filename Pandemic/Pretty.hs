@@ -31,6 +31,8 @@ instance IsString t => IsString (Chunk t) where
 class Pretty t where
     pretty :: t -> [Chunk Text]
 
+instance Pretty Text where
+    pretty t = [chunk t]
 
 cityColor :: City -> (Chunk a -> Chunk a)
 cityColor = diseaseColor . (^. nativeColor)
