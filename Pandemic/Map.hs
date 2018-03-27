@@ -7,6 +7,7 @@ import Control.Monad.Writer
 import Control.Monad.List
 import qualified Data.ByteString as BS
 import Data.ByteString.Char8 (pack)
+import qualified Data.Map as M
 import Data.Monoid
 import Data.Set as S (toList)
 import Data.String
@@ -21,6 +22,7 @@ import Pandemic.RangeMap as RM
 import Pandemic.Sliceable
 import Pandemic.Pretty
 import Pandemic.Rules
+import Pandemic.Util
 import Rainbow
 import Rainbow.Types (yarn)
 
@@ -98,5 +100,17 @@ instance Display City where
         color = city ^. (nativeColor . to diseaseColor)
         name  = city ^. cityName
 
+instance Display Player where
+    display player = return . color . chunk $ label where
+        r = player ^. role
+        color = roleColor r
+        label = fromString (take 1 (show r))
+
 instance Display Game where
-    display g = choice (g ^. cities . to S.toList) >>= display
+    display g = dPlayers <|> dDisease <|> dCities where
+        dCities = choice (g ^. cities . to S.toList) >>= display
+        dDisease = choice allOfThem >>= \color -> move (-1) (fromEnum color - 2) >> fmap (diseaseColor color) (display (g ^. disease color))
+        dPlayers = (choice . zip [0..]) (g ^.. players . traverse) >>= \(i,p) -> uncurry move (p ^. location . coordinates) >> move 1 (i-2) >> display p
+
+instance Display Disease where
+    display dis = choice (dis ^.. infection . to M.toList) >>= choice >>= \(c,i) -> uncurry move (c ^. coordinates) >> return (fromString (show i))
