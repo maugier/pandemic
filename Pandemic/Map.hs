@@ -28,11 +28,17 @@ import Rainbow.Types (yarn)
 
 type Render = WriterT (Sum Int,Sum Int)  ([])
 
-move :: Int -> Int -> Render ()
-move y x = tell (Sum y, Sum x)
+move :: (Int,Int) -> Render ()
+move (y,x) = tell (Sum y, Sum x)
+
+moveY y = move (y,0)
+moveX x = move (0,x)
+
+drawAt :: (Int,Int) -> t -> Render t
+drawAt (y,x) t = writer (t,(Sum y,Sum x)) 
 
 centered :: Text -> Render Text
-centered t = move 0 (-(T.length t) `div` 2) >> return t
+centered t = t <$ moveX (-((T.length t - 1) `div` 2))
 
 multiline :: Text -> Render Text
 multiline t = WriterT [ (l,(Sum n, Sum 0)) | (n,l) <- zip [0..] $ T.lines t ]
@@ -65,14 +71,14 @@ instance Paddable a => Paddable (Chunk a) where
 
 drawLine :: [(Int,Int)] -> Render Text
 drawLine [] = A.empty
-drawLine [(y,x)] = move y x >> return "+"
-drawLine ((y,x):(r@((y',x'):_))) = (move y x >> (return "+" <|> drawSegment (y'-y) (x'-x))) <|> drawLine r
+drawLine [p] = "+" <$ move p
+drawLine ((y,x):(r@((y',x'):_))) = (move (y,x) >> (return "+" <|> drawSegment (y'-y) (x'-x))) <|> drawLine r
 
 drawSegment 0 0 = A.empty
-drawSegment 0 x | x > 0  = move 0 1 >> return (T.replicate (x-1) "-")
-                | x < 0  = move 0 x >> drawSegment 0 (-x)
-drawSegment y 0 | y > 0  = choice [1..(y-1)] >>= flip move 0 >> return "|"
-                | y < 0  = move y 0 >> drawSegment (-y) 0
+drawSegment 0 x | x > 0  = moveX 1 >> return (T.replicate (x-1) "-")
+                | x < 0  = moveX x >> drawSegment 0 (-x)
+drawSegment y 0 | y > 0  = choice [1..(y-1)] >>= moveY >> return "|"
+                | y < 0  = moveY y >> drawSegment (-y) 0
 
 
 colorRender8 :: (Renderable t, Paddable t) => Render (Chunk t) -> [ByteString]
@@ -86,8 +92,8 @@ colorPrint8 = mapM_ BS.putStr . colorRender8
 {-
  -  Koch's curve demo
  -
- -  fractal n mix = return x <|> (choice [(-n,0),(0,n),(n,0),(0,-n)] >>= uncurry move >> return (mix x) )
- -  colorPrint8 $ move 20 20 >> fractal 1 (fore red) "*" >>= fractal 3 (fore green) >>= fractal 9 (fore blue)
+ -  fractal n mix = return x <|> (choice [(-n,0),(0,n),(n,0),(0,-n)] >>= move >> return (mix x) )
+ -  colorPrint8 $ move (20,20) >> fractal 1 (fore red) "*" >>= fractal 3 (fore green) >>= fractal 9 (fore blue)
  -
  -}
 
@@ -95,7 +101,7 @@ class Display t where
     display :: t -> Render (Chunk Text)
 
 instance Display City where
-    display city = uncurry move loc >> fmap (color . chunk) (centered name) where
+    display city = move loc >> fmap (color . chunk) (centered name) where
         loc   = city ^. coordinates
         color = city ^. (nativeColor . to diseaseColor)
         name  = city ^. cityName
@@ -107,10 +113,15 @@ instance Display Player where
         label = fromString (take 1 (show r))
 
 instance Display Game where
-    display g = dPlayers <|> dDisease <|> dCities where
+    display g = (chunk <$> backdrop) <|> (curPlayer <$ move (26,1)) <|> counters <|> dPlayers <|> dDisease <|> dCities where
         dCities = choice (g ^. cities . to S.toList) >>= display
-        dDisease = choice allOfThem >>= \color -> move (-1) (fromEnum color - 2) >> fmap (diseaseColor color) (display (g ^. disease color))
-        dPlayers = (choice . zip [0..]) (g ^.. players . traverse) >>= \(i,p) -> uncurry move (p ^. location . coordinates) >> move 1 (i-2) >> display p
+        dDisease = choice allOfThem >>= \color -> move (-1, fromEnum color - 2) >> fmap (diseaseColor color) (display (g ^. disease color))
+        dPlayers = (choice . zip [0..]) (g ^.. players . traverse) >>= \(i,p) -> (move (p ^. location . coordinates) >> move (1,(i-2)) >> display p)
+        counters = (move (21,88) >> fmap (fore green . chunk) (multiline (fromString ("Outbreaks: " ++ show (g ^. outbreaks) ++ "\nIntensity: " ++ show (g ^. intensity))))) 
+        curPlayer = (g ^. currentPlayer . role . to roleColor) ("Current player: " <> fromString (g ^. currentPlayer . name))
 
 instance Display Disease where
-    display dis = choice (dis ^.. infection . to M.toList) >>= choice >>= \(c,i) -> uncurry move (c ^. coordinates) >> return (fromString (show i))
+    display dis = choice (dis ^.. infection . to M.toList) >>= choice >>= \(c,i) -> move (c ^. coordinates) >> return (fromString (show i))
+
+backdrop :: Render Text
+backdrop = move (1,1) >> multiline "     \n                                                                                                                           \n<--San Francisco---Chicago-------Montreal---New York-------London-----Essen----St.Petersburg       Beijing---Seoul----Tokyo-------->\n    /     |        / |   \\          |      /      \\       /     \\    /   \\        |  \\                    \\    |     /     \\    \n<--+      |       /  |    \\         |     /        \\     /       \\  /     \\       |   \\                    \\   |    /       \\      \n          |      /   |     \\        |    /          \\   /         \\/       \\      |    \\                    \\  |   /         \\     \n      Los Angeles    | Atlanta--Washington          Madrid-------Paris-----Milan  |  Moscow                 Shangai---Taipei--Osaka\n       /       \\     |      |     /                /     \\      /             |   |   / |                         \\     |   \\      \n<-----+         \\    |      |    /                /       \\    /              |   |  /  |                          \\    |    \\\n                 \\   |      |   /                /         \\  /               |   | /   |                           \\   |     \\      \n                 Mexico-----Miami               /         Alger--------------Istanbul   Tehran---Dehli---Calcutta---Hong Kong--Manila---->\n                   | \\        |                /               \\            /   |      /  |     /  |  \\     |    \\     |          |   \\\n                   |  +---+   |               /                 \\       +--+    |    //   |    /   |   \\    |     \\    |          |    +\n                   |       \\  |              /                   \\     /        |   /     |   /    |    \\   |      \\   |          |    |\n                   |        Bogota          /                     Cairo-------Bagdad----Karachi--Mumbai--Chennai----Bangkok-----Saigon |\n                   | /------/ | \\          /                     /     \\     /          /                      \\       |       /  |    |\n                  Lima        |  \\        /                     /       \\   /          /                        \\      |      /   |    +\n                   |          |   \\      /      /-Lagos---Khartoum      Riyad---------+                          \\     |     /    |   /\n                   |          |   Sao Paulo----/   |      /   |                                                   +-Jakarta-+   Sydney--->\n                   |          |   /                |     /    |                                                                      \n                   |          |  /                 |    /     |                        Intensity: n\n                   |          | /                  |   /      |                        Outbreaks: n\n                   |     Buenos Aires           Kinshasa--Johannesburg\n                Santiago                                          \n                      \n     \n"

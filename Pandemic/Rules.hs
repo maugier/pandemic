@@ -1,4 +1,4 @@
-{-# LANGUAGE TemplateHaskell, RankNTypes, FlexibleContexts, LambdaCase #-}
+{-# LANGUAGE TemplateHaskell, RankNTypes, FlexibleInstances, FlexibleContexts, UndecidableInstances, LambdaCase #-}
 
 module Pandemic.Rules where
 
@@ -26,11 +26,15 @@ data Role = Scientist
           | EmergencyPlanner
           | QuarantinePlanner
           | Medic
-    deriving (Eq,Ord,Show)
+    deriving (Eq,Ord,Show,Enum,Bounded)
 
 data Color = Blue | Yellow | Black | Red
     deriving (Show,Eq,Ord,Enum,Bounded)
 
+
+instance Random Role where
+    randomR (a,b) g = let (x,g') = randomR (fromEnum a,fromEnum b) g in (toEnum x,g')
+    random = randomR (minBound, maxBound)
 
 data City = City {
     _cityName :: Text,
@@ -41,7 +45,7 @@ data City = City {
 makeLenses ''City
 
 instance Ord City where
-    compare = comparing _cityName
+    compare = comparing _nativeColor <> comparing _cityName
 
 instance Eq City where
     (==) = (==) `on` _cityName
@@ -166,7 +170,17 @@ takeCard card = do
     if ok
         then cards %= delete card
         else block "The player does not have this card"
-    
+
+assignRoles :: (String,Maybe Role) -> IO (String,Role)
+assignRoles (name, Just r) = do
+                                putStrLn (name ++ " has chosen to be a " ++ show r)
+                                return (name, r)
+assignRoles (name, Nothing) = do
+                                r <- randomIO
+                                putStrLn (name ++ " was assigned to be " ++ show r)
+                                return (name, r)
+
+
 
 newGame :: City -> [(String,Role)] -> Game
 newGame home players = Game {

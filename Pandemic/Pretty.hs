@@ -51,12 +51,12 @@ instance Pretty InfectionCard where
     pretty (InfectionCard city) = pretty city
 
 instance Pretty PlayerCard where
-    pretty EpidemicCard = [fore R.green $ chunk "EPIDEMIC"]
+    pretty EpidemicCard = [fore R.green $ chunk "[EPIDEMIC]"]
     pretty (HandCard hand) = pretty hand
 
 instance Pretty HandCard where
-    pretty (EventCard event) = [fore R.yellow $ chunk (pack (show event))]
-    pretty (CityCard city) = pretty city
+    pretty (EventCard event) = [chunk "[", fore R.yellow $ chunk (pack (show event)), chunk "]"]
+    pretty (CityCard city) = [chunk "["] ++ pretty city ++ [chunk "]"]
 
 instance Pretty (P.Color, Disease) where
     pretty (color, disease) = pretty color ++ [" disease:"]
@@ -77,3 +77,4 @@ instance Pretty Game where
     
 pPrint :: Pretty t => t -> IO ()
 pPrint = mapM_ BS.putStr . chunksToByteStrings toByteStringsColors8 . pretty
+

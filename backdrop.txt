@@ -1,0 +1,26 @@
+     
+                                                                                                                           
+<--San Francisco---Chicago-------Montreal---New York-------London-----Essen----St.Petersburg       Beijing---Seoul----Tokyo-------->
+    /     |        / |   \          |      /      \       /     \    /   \        |  \                    \    |     /     \    
+<--+      |       /  |    \         |     /        \     /       \  /     \       |   \                    \   |    /       \      
+          |      /   |     \        |    /          \   /         \/       \      |    \                    \  |   /         \     
+      Los Angeles    | Atlanta--Washington     +----Madrid-------Paris-----Milan  |  Moscow                 Shangai---Taipei--Osaka
+       /       \     |      |     /           /          \      /             |   |   / |                         \     |   \      
+<-----+         \    |      |    /           /            \    /              |   |  /  |                          \    |    \
+                 \   |      |   /           /              \  /               |   | /   |                           \   |     \      
+                 Mexico-----Miami----------+              Alger--------------Istanbul   Tehran---Dehli---Calcutta---Hong Kong--Manilla---->
+                   | \        |                                \            /   |      /  |     /  |  \     |    \     |          |   \
+                   |  +---+   |                                 \       +--+    |    //   |    /   |   \    |     \    |          |    +
+                   |       \  |                                  \     /        |   /     |   /    |    \   |      \   |          |    |
+                   |        Bogota                                Cairo-------Bagdad----Karachi--Mumbai--Chennai----Bangkok-----Saigon |
+                   | /------/ | \                                /     \     /          /                      \       |       /  |    |
+                  Lima        |  \                              /       \   /          /                        \      |      /   |    +
+                   |          |   \        /------Lagos---Khartoum      Riyad---------+                          \     |     /    |   /
+                   |          |   Sao Paulo        |      /   |                                                   +-Jakarta-+   Sydney--->
+                   |          |   /                |     /    |                                                                      
+                   |          |  /                 |    /     |                                      
+                   |          | /                  |   /      |                                     
+                   |     Buenos Aires           Kinshasa--Johannesburg
+                Santiago                                          
+                      
+     
