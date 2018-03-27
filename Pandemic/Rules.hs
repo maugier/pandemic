@@ -8,6 +8,7 @@ import Control.Lens.At
 import Control.Monad.State
 import Control.Monad.Random hiding (next)
 import Data.Function (on)
+import Data.List ((\\))
 import qualified Data.Map as M
 import Data.Set (Set, member, insert, empty, singleton, elems, delete)
 import Data.Maybe
@@ -171,14 +172,14 @@ takeCard card = do
         then cards %= delete card
         else block "The player does not have this card"
 
-assignRoles :: (String,Maybe Role) -> IO (String,Role)
-assignRoles (name, Just r) = do
-                                putStrLn (name ++ " has chosen to be a " ++ show r)
-                                return (name, r)
-assignRoles (name, Nothing) = do
-                                r <- randomIO
-                                putStrLn (name ++ " was assigned to be " ++ show r)
-                                return (name, r)
+assignRoles :: [(String,Maybe Role)] -> IO [(String,Role)]
+assignRoles rs = distribute rs <$> shuffleM remaining where
+        distribute [] _ = []
+        distribute _ [] = error "You have more players than roles"
+        distribute ((name,Nothing):rest) (role:remain) = (name,role) : distribute rest remain
+        distribute ((name,Just role):rest) remain = (name,role) : distribute rest remain
+        remaining = allOfThem \\ [ role | (_,Just role) <- rs ]
+
 
 
 

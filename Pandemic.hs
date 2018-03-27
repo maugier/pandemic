@@ -12,7 +12,7 @@ import Pandemic.World
 
 new :: Difficulty -> [(String,Maybe Role)] -> IO (IORef Game)
 new difficulty players = do
-    ps <- mapM assignRoles players
+    ps <- assignRoles players
     g <- newIORef (newGame atlanta ps)
     play g $ setupGame difficulty
     return g
